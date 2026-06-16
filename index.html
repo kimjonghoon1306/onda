@@ -711,8 +711,9 @@ body::after{
         <label class="ig-drop"><input type="file" accept="image/*" onchange="igUpload(event)" hidden>📁 사진 선택 / 끌어다 놓기</label>
       </div>
       <div class="ig-tabpane" id="igPaneHiggs" style="display:none">
+        <input id="igHiggsId" type="text" placeholder="① Key ID (앞쪽 키)" style="width:100%;margin-bottom:6px">
         <div class="ig-imgprompt-row" style="margin-bottom:8px">
-          <input id="igHiggsKey" type="password" placeholder="키ID:시크릿 (예: abc123:xyz789)">
+          <input id="igHiggsSecret" type="password" placeholder="② Secret (뒤쪽 키)">
           <button onclick="saveHiggsKey()">저장</button>
           <a class="ig-keyget" href="https://cloud.higgsfield.ai" target="_blank" rel="noopener">발급</a>
         </div>
@@ -1446,7 +1447,9 @@ function openInsta(){
   // 사업 선택 채우기
   const sel=document.getElementById('igBiz');
   if(sel && !sel.options.length){ sel.innerHTML='<option value="">사업 선택</option>'+BIZ.map(b=>`<option>${b.n}</option>`).join(''); }
-  const hk=document.getElementById('igHiggsKey'); if(hk) hk.value=localStorage.getItem('onda-higgs')||'';
+  const saved=(localStorage.getItem('onda-higgs')||'').split(':');
+  const hid=document.getElementById('igHiggsId'), hsec=document.getElementById('igHiggsSecret');
+  if(hid) hid.value=saved[0]||''; if(hsec) hsec.value=saved[1]||'';
   document.getElementById('insta').classList.add('on');
 }
 function closeInsta(){ document.getElementById('insta').classList.remove('on'); }
@@ -1511,9 +1514,12 @@ function igUpload(e){
 }
 /* ── 힉스필드 이미지 생성 (REST, 비동기 폴링) ── */
 function saveHiggsKey(){
-  const v=document.getElementById('igHiggsKey').value.trim();
+  const id=document.getElementById('igHiggsId').value.trim();
+  const sec=document.getElementById('igHiggsSecret').value.trim();
+  if(!id||!sec){ toast('Key ID와 Secret을 둘 다 넣어주세요','warn'); return; }
+  const v=id+':'+sec;
   localStorage.setItem('onda-higgs',v); syncSoon&&syncSoon();
-  toast(v?'🎬 힉스필드 키 저장됨':'키 삭제됨', v?'ok':'warn');
+  toast('🎬 힉스필드 키 저장됨 (ID+Secret)','ok');
 }
 async function igHiggsGen(){
   const key=localStorage.getItem('onda-higgs');
