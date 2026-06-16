@@ -354,6 +354,7 @@ body::after{
 .ig-imgprompt-row button,.ig-drop{background:color-mix(in srgb,var(--accent) 16%,transparent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);color:var(--accent);border-radius:10px;font-weight:700;cursor:pointer}
 .ig-imgprompt-row button{padding:0 16px;font-size:13px}
 .ig-drop{display:block;text-align:center;padding:22px;font-size:13px;border-style:dashed}
+.ig-keyget{display:grid;place-items:center;padding:0 14px;border-radius:10px;background:var(--surf2);border:1px solid var(--line);color:var(--accent);font-size:12px;font-weight:700;text-decoration:none}
 .ig-note{font-size:12px;color:var(--dim);line-height:1.6;background:var(--surf2);border:1px dashed var(--line);border-radius:10px;padding:12px}
 /* 인스타 미리보기 카드 */
 .ig-preview{background:#fff;border-radius:12px;overflow:hidden;color:#262626;box-shadow:0 10px 30px -12px #000}
@@ -705,7 +706,16 @@ body::after{
         <label class="ig-drop"><input type="file" accept="image/*" onchange="igUpload(event)" hidden>📁 사진 선택 / 끌어다 놓기</label>
       </div>
       <div class="ig-tabpane" id="igPaneHiggs" style="display:none">
-        <div class="ig-note">🎬 힉스필드 고퀄 생성은 API 키 연동이 필요해요. ⚙️ 설정에 힉스필드 키를 넣으면 활성화됩니다. (2단계 예정)</div>
+        <div class="ig-imgprompt-row" style="margin-bottom:8px">
+          <input id="igHiggsKey" type="password" placeholder="힉스필드 API 키 (Bearer)">
+          <button onclick="saveHiggsKey()">저장</button>
+          <a class="ig-keyget" href="https://cloud.higgsfield.ai" target="_blank" rel="noopener">발급</a>
+        </div>
+        <div class="ig-imgprompt-row">
+          <input id="igHiggsPrompt" type="text" placeholder="이미지 설명 (비우면 캡션·주제로 자동)">
+          <button onclick="igHiggsGen()" id="igHiggsBtn">생성</button>
+        </div>
+        <div class="ig-note" style="margin-top:8px">🎬 고퀄 생성(flux). cloud.higgsfield.ai에서 API 키 발급(유료 크레딧). ⚠️브라우저에서 막히면(CORS) 서버 경유가 필요할 수 있어요.</div>
       </div>
 
       <!-- 4. 미리보기 -->
@@ -1431,6 +1441,7 @@ function openInsta(){
   // 사업 선택 채우기
   const sel=document.getElementById('igBiz');
   if(sel && !sel.options.length){ sel.innerHTML='<option value="">사업 선택</option>'+BIZ.map(b=>`<option>${b.n}</option>`).join(''); }
+  const hk=document.getElementById('igHiggsKey'); if(hk) hk.value=localStorage.getItem('onda-higgs')||'';
   document.getElementById('insta').classList.add('on');
 }
 function closeInsta(){ document.getElementById('insta').classList.remove('on'); }
@@ -1492,6 +1503,51 @@ function igUpload(e){
   const rd=new FileReader();
   rd.onload=()=>{ igImg=rd.result; document.getElementById('igpImg').innerHTML=`<img src="${igImg}" alt="업로드 이미지">`; toast('📁 이미지 업로드됨','ok'); };
   rd.readAsDataURL(f);
+}
+/* ── 힉스필드 이미지 생성 (REST, 비동기 폴링) ── */
+function saveHiggsKey(){
+  const v=document.getElementById('igHiggsKey').value.trim();
+  localStorage.setItem('onda-higgs',v); syncSoon&&syncSoon();
+  toast(v?'🎬 힉스필드 키 저장됨':'키 삭제됨', v?'ok':'warn');
+}
+async function igHiggsGen(){
+  const key=localStorage.getItem('onda-higgs');
+  if(!key){ toast('힉스필드 API 키를 먼저 저장하세요 (cloud.higgsfield.ai).','warn'); return; }
+  let p=document.getElementById('igHiggsPrompt').value.trim();
+  if(!p) p=(document.getElementById('igTopic').value.trim()||document.getElementById('igCaption').value.slice(0,80));
+  if(!p){ toast('이미지 설명이나 주제를 입력해 주세요','warn'); return; }
+  const btn=document.getElementById('igHiggsBtn'); btn.disabled=true; btn.textContent='...';
+  const box=document.getElementById('igpImg'); box.innerHTML='<span class="igp-ph">🎬 힉스필드 생성 중...</span>';
+  const H={Authorization:'Bearer '+key,'Content-Type':'application/json'};
+  try{
+    const r=await fetch('https://api.higgsfield.ai/v1/generations',{method:'POST',headers:H,
+      body:JSON.stringify({task:'text-to-image',model:'flux',prompt:p,width:1024,height:1024})});
+    if(!r.ok){ const t=await r.text().catch(()=>''); throw new Error(`HTTP ${r.status} ${t.slice(0,80)}`); }
+    const sub=await r.json();
+    const id=sub.id||sub.generation_id||sub.data?.id;
+    if(!id) throw new Error('생성 ID를 받지 못했어요');
+    // 폴링 (최대 ~60초)
+    let url=null;
+    for(let i=0;i<30;i++){
+      await new Promise(s=>setTimeout(s,2000));
+      const pr=await fetch(`https://api.higgsfield.ai/v1/generations/${id}`,{headers:H});
+      const pd=await pr.json();
+      const status=pd.status||pd.state;
+      box.innerHTML=`<span class="igp-ph">🎬 생성 중... (${status||'대기'})</span>`;
+      if(/complet|success|done/i.test(status||'')){
+        url=pd.result?.url||pd.output?.[0]?.url||pd.output_url||pd.image_url||pd.url||(Array.isArray(pd.results)&&pd.results[0]?.url);
+        break;
+      }
+      if(/fail|error/i.test(status||'')) throw new Error('생성 실패('+status+')');
+    }
+    if(!url) throw new Error('시간 초과 또는 결과 URL 없음');
+    igImg=url; box.innerHTML=`<img src="${url}" alt="힉스필드 이미지" crossorigin="anonymous">`;
+    toast('🎬 힉스필드 이미지 생성 완료','ok');
+  }catch(e){
+    box.innerHTML='<span class="igp-ph">힉스필드 실패 — '+e.message+'</span>';
+    toast('힉스필드 실패: '+e.message+' (브라우저 CORS면 서버 경유 필요)','err');
+  }
+  btn.disabled=false; btn.textContent='생성';
 }
 function igPublish(){
   const cap=document.getElementById('igCaption').value.trim();
