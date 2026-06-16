@@ -45,7 +45,7 @@
 html{scroll-behavior:smooth}
 body{
   font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--txt);
-  min-height:100vh;min-height:100dvh;overflow-x:hidden;transition:background var(--transition),color var(--transition);
+  min-height:100vh;min-height:100dvh;overflow-x:hidden;
   position:relative;
 }
 /* 배경 그리드 + 오로라 (천천히 흐름) */
@@ -172,6 +172,11 @@ body::after{
   .hud-logo .mark{width:32px;height:32px}
   .icon-btn{width:36px;height:36px;flex-shrink:0}
   .theme-btn{width:48px;height:28px;flex-shrink:0}
+  /* 모바일: 무거운 배경 애니메이션 정지 → 테마 토글/스크롤 떨림 제거 */
+  #fx{display:none}                         /* 파티클 캔버스 끔(모바일 가장 무거움) */
+  body::before{animation:none}              /* 격자 드리프트 정지 */
+  body::after{animation:none;opacity:.5}    /* 오로라 숨쉬기 정지 */
+  .deco-ring{animation:none!important;opacity:.3}  /* 회전 데코링 정지 */
 }
 .theme-btn{width:54px;height:30px;border-radius:99px;border:1px solid var(--line2);background:var(--surf2);
   position:relative;cursor:pointer;transition:.3s;flex-shrink:0}
