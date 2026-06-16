@@ -712,7 +712,7 @@ body::after{
       </div>
       <div class="ig-tabpane" id="igPaneHiggs" style="display:none">
         <div class="ig-imgprompt-row" style="margin-bottom:8px">
-          <input id="igHiggsKey" type="password" placeholder="힉스필드 API 키 (Bearer)">
+          <input id="igHiggsKey" type="password" placeholder="키ID:시크릿 (예: abc123:xyz789)">
           <button onclick="saveHiggsKey()">저장</button>
           <a class="ig-keyget" href="https://cloud.higgsfield.ai" target="_blank" rel="noopener">발급</a>
         </div>
@@ -1524,29 +1524,31 @@ async function igHiggsGen(){
   const btn=document.getElementById('igHiggsBtn'); btn.disabled=true; btn.textContent='...';
   const box=document.getElementById('igpImg'); box.innerHTML='<span class="igp-ph">🎬 힉스필드 생성 중...</span>';
   const H={'x-higgs-key':key,'Content-Type':'application/json'};
+  const findUrl=o=>{ // 응답 어디에 있든 첫 이미지 URL 찾기
+    let f=null; (function dig(x){ if(f||!x||typeof x!=='object')return;
+      if(typeof x.url==='string'&&/^https?:/.test(x.url)){f=x.url;return;}
+      for(const k in x) dig(x[k]); })(o); return f; };
   try{
-    // ONDA 서버리스 중계(/api/higgs)로 CORS 우회
+    // ONDA 서버리스 중계(/api/higgs) → platform.higgsfield.ai (CORS 우회)
     const r=await fetch('/api/higgs',{method:'POST',headers:H,
-      body:JSON.stringify({task:'text-to-image',model:'flux',prompt:p,width:1024,height:1024})});
+      body:JSON.stringify({params:{prompt:p, aspect_ratio:'1:1', width_and_height:'1536x1536', quality:'1080p', seed:Math.floor(Math.random()*99999)}})});
     const t=await r.text(); let sub; try{sub=JSON.parse(t);}catch{sub={};}
-    if(!r.ok) throw new Error(sub.error||`HTTP ${r.status} ${t.slice(0,100)}`);
-    const id=sub.id||sub.generation_id||sub.data?.id;
-    if(!id) throw new Error('생성 ID 없음 — 응답: '+t.slice(0,120));
-    // 폴링 (최대 ~70초)
-    let url=null;
-    for(let i=0;i<35;i++){
+    if(!r.ok) throw new Error(sub.error||sub.message||sub.raw||`HTTP ${r.status} ${t.slice(0,120)}`);
+    const id=sub.id||sub.job_set_id||sub.data?.id;
+    if(!id) throw new Error('생성 ID 없음 — 응답: '+t.slice(0,150));
+    // 폴링 /v1/job-sets/{id} (최대 ~80초)
+    let url=null, lastStatus='';
+    for(let i=0;i<40;i++){
       await new Promise(s=>setTimeout(s,2000));
       const pr=await fetch(`/api/higgs?id=${encodeURIComponent(id)}`,{headers:H});
       const pd=await pr.json().catch(()=>({}));
-      const status=pd.status||pd.state||'';
-      box.innerHTML=`<span class="igp-ph">🎬 생성 중... (${status||'대기'})</span>`;
-      if(/complet|success|done|finish/i.test(status)){
-        url=pd.result?.url||pd.output?.[0]?.url||pd.output_url||pd.image_url||pd.url||(Array.isArray(pd.results)&&pd.results[0]?.url)||pd.images?.[0]?.url||pd.data?.url;
-        break;
-      }
-      if(/fail|error|cancel/i.test(status)) throw new Error('생성 실패('+status+')');
+      const jobs=pd.jobs||pd.data?.jobs||[];
+      lastStatus=(jobs[0]&&jobs[0].status)||pd.status||pd.state||'대기';
+      box.innerHTML=`<span class="igp-ph">🎬 생성 중... (${lastStatus})</span>`;
+      if(/complet|success|done|finish/i.test(lastStatus)){ url=findUrl(pd); break; }
+      if(/fail|error|cancel|nsfw/i.test(lastStatus)) throw new Error('생성 중단('+lastStatus+')');
     }
-    if(!url) throw new Error('시간 초과 또는 결과 URL을 못 찾음');
+    if(!url) throw new Error('시간 초과(마지막: '+lastStatus+')');
     igImg=url; box.innerHTML=`<img src="${url}" alt="힉스필드 이미지" crossorigin="anonymous">`;
     toast('🎬 힉스필드 이미지 생성 완료','ok');
   }catch(e){
