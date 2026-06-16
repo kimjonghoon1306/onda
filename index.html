@@ -187,9 +187,14 @@ body::after{
 @keyframes sparkUp{from{height:0}}
 
 /* 사업 카드 */
-.biz-head{display:flex;align-items:baseline;gap:10px;margin-bottom:14px}
+.biz-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
 .biz-head h2{font-family:'Orbitron';font-size:16px;letter-spacing:.05em}
-.biz-head span{font-size:12px;color:var(--sub);font-family:'Share Tech Mono'}
+.biz-head>span{font-size:12px;color:var(--sub);font-family:'Share Tech Mono'}
+.biz-summary{display:flex;gap:8px;margin-left:auto}
+.bs-item{display:flex;flex-direction:column;align-items:center;min-width:58px;padding:7px 12px;border-radius:12px;background:var(--surf2);border:1px solid var(--line)}
+.bs-item b{font-family:'Share Tech Mono';font-size:18px;color:var(--accent);line-height:1}
+.bs-item span{font-size:10px;color:var(--sub);margin-top:3px;letter-spacing:.02em}
+@media(max-width:520px){.biz-summary{width:100%;margin-left:0}.bs-item{flex:1}}
 .biz-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;perspective:1200px}
 @media(max-width:680px){.biz-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:420px){.biz-grid{grid-template-columns:1fr}}
@@ -466,7 +471,14 @@ body::after{
 
     <!-- 사업 카드 -->
     <div class="panel">
-      <div class="biz-head"><h2 class="orb">사업 유닛</h2><span class="mono" id="bizCount">6 UNITS · ONLINE</span></div>
+      <div class="biz-head">
+        <h2 class="orb">사업 유닛</h2><span class="mono" id="bizCount">6 UNITS · ONLINE</span>
+        <div class="biz-summary" id="bizSummary">
+          <div class="bs-item"><b id="bsOnline">–</b><span>정상</span></div>
+          <div class="bs-item"><b id="bsLive">–</b><span>LIVE</span></div>
+          <div class="bs-item"><b id="bsUptime">–</b><span>가동률</span></div>
+        </div>
+      </div>
       <div class="biz-grid" id="bizGrid"></div>
     </div>
   </div>
@@ -719,6 +731,7 @@ async function fetchLiveData(){
   const liveN=BIZ.filter(b=>b._live).length, gl=document.getElementById('gLive');
   if(gl){ gl.style.setProperty('--v',Math.round(liveN/BIZ.length*100)); gl.querySelector('b').textContent=liveN; }
   const gls=document.getElementById('gLiveSub'); if(gls) gls.textContent=`${BIZ.length}개 중 LIVE`;
+  updateSummary();
 }
 
 /* ── 사업 상세 대시보드 패널 ── */
@@ -1194,7 +1207,16 @@ async function checkAllHealth(){
   const pct=n?Math.round(up/n*100):100, gu=document.getElementById('gUptime');
   if(gu){ gu.style.setProperty('--v',pct); gu.querySelector('b').textContent=pct+'%'; }
   const gus=document.getElementById('gUptimeSub'); if(gus) gus.textContent=`${up}/${n}개 사업 정상`;
+  updateSummary(up,n);
   renderRadar();
+}
+/* ── 우측 상단 요약 통계 띠 ── */
+function updateSummary(up,n){
+  const live=BIZ.filter(b=>b._live).length;
+  const o=document.getElementById('bsOnline'), l=document.getElementById('bsLive'), u=document.getElementById('bsUptime');
+  if(o) o.textContent = (up!==undefined&&n!==undefined)?`${up}/${n}`:`${BIZ.filter(b=>b._health!=='down').length}/${BIZ.filter(b=>b.url&&b.url!=='#').length}`;
+  if(l) l.textContent = live;
+  if(u && up!==undefined && n) u.textContent = Math.round(up/n*100)+'%';
 }
 
 /* ── 👏 전체 순차 점검 보고 (각 사업 차례대로) ── */
