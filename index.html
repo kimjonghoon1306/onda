@@ -126,6 +126,19 @@ body::after{
 .hud-top{display:flex;align-items:center;gap:16px;padding:14px 20px;border-radius:18px;
   background:var(--surf);border:1px solid var(--line);box-shadow:var(--shadow);margin-bottom:22px;position:relative;overflow:hidden}
 .hud-top::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(var(--accent),var(--accent3))}
+/* 경보 배너 */
+.alert-bar{display:none;align-items:center;gap:12px;padding:13px 18px;margin:-8px 0 22px;border-radius:14px;
+  background:linear-gradient(90deg,color-mix(in srgb,#ff6b6b 22%,var(--surf)),var(--surf));
+  border:1px solid color-mix(in srgb,#ff6b6b 45%,transparent);position:relative;overflow:hidden;
+  animation:alertIn .4s, alertGlow 2s ease-in-out infinite}
+.alert-bar.on{display:flex}
+.alert-bar::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:#ff6b6b}
+@keyframes alertIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1}}
+@keyframes alertGlow{50%{box-shadow:0 0 26px -6px #ff6b6b}}
+.alert-bar .ab-ico{font-size:18px;animation:pulse 1s infinite}
+.alert-bar .ab-tx{flex:1;font-size:13.5px;font-weight:700;color:#ffd9d9}
+.alert-bar .ab-act{background:#ff6b6b;color:#1a0808;border:none;border-radius:9px;padding:7px 13px;font-size:12px;font-weight:800;cursor:pointer;flex-shrink:0}
+.alert-bar .ab-x{background:none;border:1px solid color-mix(in srgb,#ff6b6b 40%,transparent);color:#ffb0b0;width:30px;height:30px;border-radius:8px;cursor:pointer;flex-shrink:0}
 .hud-logo{display:flex;align-items:center;gap:12px}
 .hud-logo .mark{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;
   background:radial-gradient(circle at 50% 40%,var(--accent),var(--accent2));font-family:'Orbitron';font-weight:900;color:#04121a;font-size:20px;box-shadow:0 0 22px -4px var(--glow)}
@@ -420,6 +433,14 @@ body::after{
     <div class="hud-clock mono" id="clock">--:--:--</div>
     <button class="icon-btn" onclick="openSettings()" aria-label="설정" title="AI 설정">⚙️</button>
     <button class="theme-btn" onclick="toggleTheme()" aria-label="테마"><i id="themeIco">🌙</i></button>
+  </div>
+
+  <!-- 경보 배너 -->
+  <div class="alert-bar" id="alertBar">
+    <span class="ab-ico">⚠️</span>
+    <span class="ab-tx" id="alertTx"></span>
+    <button class="ab-act" onclick="checkAllHealth()">재점검</button>
+    <button class="ab-x" onclick="dismissAlert()">✕</button>
   </div>
 
   <div class="hud-grid">
@@ -1208,8 +1229,22 @@ async function checkAllHealth(){
   if(gu){ gu.style.setProperty('--v',pct); gu.querySelector('b').textContent=pct+'%'; }
   const gus=document.getElementById('gUptimeSub'); if(gus) gus.textContent=`${up}/${n}개 사업 정상`;
   updateSummary(up,n);
+  // 경보: 다운된 사업 있으면 배너
+  const downNames=BIZ.filter(b=>b._health==='down').map(b=>b.n);
+  if(downNames.length) showAlert(downNames); else hideAlert();
   renderRadar();
 }
+/* ── 경보 배너 ── */
+let alertDismissed=false;
+function showAlert(names){
+  if(alertDismissed) return;
+  const bar=document.getElementById('alertBar'), tx=document.getElementById('alertTx');
+  if(!bar) return;
+  tx.innerHTML=`${names.length}개 사업 응답 없음 — <b>${names.join(', ')}</b>. 점검이 필요합니다.`;
+  bar.classList.add('on');
+}
+function hideAlert(){ const bar=document.getElementById('alertBar'); if(bar) bar.classList.remove('on'); }
+function dismissAlert(){ hideAlert(); alertDismissed=true; setTimeout(()=>{alertDismissed=false;},30000); }
 /* ── 우측 상단 요약 통계 띠 ── */
 function updateSummary(up,n){
   const live=BIZ.filter(b=>b._live).length;
