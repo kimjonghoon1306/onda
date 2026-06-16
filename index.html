@@ -881,20 +881,68 @@ function pickVoice(){
 }
 function ensureVoice(){ _voice=pickVoice(); }
 if(window.speechSynthesis){ speechSynthesis.onvoiceschanged=ensureVoice; ensureVoice(); }
-function speak(html){
-  if(!voiceOut||!window.speechSynthesis) return;
-  let plain=String(html)
+function cleanForSpeech(html){
+  return String(html)
     .replace(/<[^>]+>/g,'')                       // 태그 제거
     .replace(/&[a-z]+;/g,' ')                      // HTML 엔티티
     .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FE0F}\u{1F1E6}-\u{1F1FF}]/gu,'') // 이모지/기호
     .replace(/[·•▶►◆■]/g,' ').replace(/\s+/g,' ').trim();
-  if(!plain) return;
+}
+function stopSpeech(){ try{ if(window._ondaAudio){ window._ondaAudio.pause(); window._ondaAudio=null; } }catch(e){} if(window.speechSynthesis) speechSynthesis.cancel(); }
+function speak(html){
+  if(!voiceOut) return;
+  const plain=cleanForSpeech(html); if(!plain) return;
+  stopSpeech();
+  // Gemini 키 있으면 사람같은 Gemini TTS, 실패 시 브라우저 음성 폴백
+  const gkey=localStorage.getItem('jarvis-key-gemini');
+  if(gkey){ geminiTTS(plain).then(ok=>{ if(!ok) browserSpeak(plain); }); }
+  else browserSpeak(plain);
+}
+function browserSpeak(plain){
+  if(!window.speechSynthesis) return;
   speechSynthesis.cancel();
   const u=new SpeechSynthesisUtterance(plain);
   if(!_voice) ensureVoice();
   if(_voice){ u.voice=_voice; u.lang=_voice.lang; } else u.lang='ko-KR';
-  u.rate=1.0; u.pitch=1.0;   // 자연스러운 기본값
+  u.rate=1.0; u.pitch=1.0;
   speechSynthesis.speak(u);
+}
+/* ── Gemini TTS (사람같은 음성) ── */
+const ONDA_VOICE='Charon'; // 차분·신뢰감 비서 톤 (Gemini prebuilt voice)
+async function geminiTTS(plain){
+  const key=localStorage.getItem('jarvis-key-gemini'); if(!key) return false;
+  try{
+    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${key}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        contents:[{parts:[{text:'다음 문장을 차분하고 신뢰감 있는 비서 톤으로, 자연스러운 한국어 억양으로 읽어줘: '+plain}]}],
+        generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:ONDA_VOICE}}}}
+      })
+    });
+    if(!r.ok) return false;
+    const d=await r.json();
+    const part=d?.candidates?.[0]?.content?.parts?.find(p=>p.inlineData);
+    if(!part?.inlineData?.data) return false;
+    const mime=part.inlineData.mimeType||'audio/L16;rate=24000';
+    const rate=parseInt((mime.match(/rate=(\d+)/)||[])[1]||'24000');
+    const pcm=Uint8Array.from(atob(part.inlineData.data),c=>c.charCodeAt(0));
+    const blob=new Blob([pcmToWav(pcm,rate)],{type:'audio/wav'});
+    const url=URL.createObjectURL(blob);
+    const a=new Audio(url); window._ondaAudio=a;
+    a.onended=()=>URL.revokeObjectURL(url);
+    await a.play();
+    return true;
+  }catch(e){ return false; }
+}
+function pcmToWav(pcm, sampleRate){
+  const numCh=1,bps=16,blockAlign=numCh*bps/8,byteRate=sampleRate*blockAlign;
+  const buf=new ArrayBuffer(44+pcm.length), dv=new DataView(buf);
+  const ws=(o,s)=>{ for(let i=0;i<s.length;i++) dv.setUint8(o+i,s.charCodeAt(i)); };
+  ws(0,'RIFF'); dv.setUint32(4,36+pcm.length,true); ws(8,'WAVE'); ws(12,'fmt ');
+  dv.setUint32(16,16,true); dv.setUint16(20,1,true); dv.setUint16(22,numCh,true);
+  dv.setUint32(24,sampleRate,true); dv.setUint32(28,byteRate,true); dv.setUint16(32,blockAlign,true); dv.setUint16(34,bps,true);
+  ws(36,'data'); dv.setUint32(40,pcm.length,true); new Uint8Array(buf,44).set(pcm);
+  return buf;
 }
 
 /* ════════ ☁️ 기기 동기화 (Supabase + 비밀번호 AES 암호화) ════════ */
