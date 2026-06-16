@@ -1308,24 +1308,30 @@ async function toggleClap(force){
     const src=clapCtx.createMediaStreamSource(clapStream);
     const an=clapCtx.createAnalyser(); an.fftSize=512; src.connect(an);
     const buf=new Uint8Array(an.fftSize);
-    let armed=true;
+    try{ await clapCtx.resume(); }catch(e){}   // 모바일/일부 PC suspended 대비
+    let armed=true, baseline=6;
     clapOn=true; updateClapBtn();
-    toast('👏 박수 감지 ON — 박수 세 번 짝짝짝!','ok');
-    const btn=document.getElementById('clapBtn');
+    toast('👏 박수 감지 ON — 박수 세 번 짝짝짝! (입력창에 레벨 표시)','ok');
+    const btn=document.getElementById('clapBtn'), inp=document.getElementById('chatInput');
+    const ph=inp?inp.placeholder:'';
     (function loop(){
-      if(!clapOn) return;
+      if(!clapOn){ if(inp) inp.placeholder=ph; return; }
       an.getByteTimeDomainData(buf);
       let peak=0; for(let i=0;i<buf.length;i++){ const v=Math.abs(buf[i]-128); if(v>peak)peak=v; }
+      // 조용할 때 평균(baseline)을 천천히 추적 → 박수는 baseline 대비 급상승
+      baseline += (peak-baseline)*0.05;
       const now=performance.now();
-      if(peak>52 && armed){            // 박수 같은 강한 순간음 (민감도 ↑)
+      // 실시간 레벨 표시(박수 칠 때 얼마나 뛰는지 눈으로)
+      if(inp) inp.placeholder=`🎤 레벨 ${peak}  (박수 세 번!)  잡힘 ${clapTimes.length}/3`;
+      const isClap = peak>30 && peak > baseline+14;  // 절대 최소 + 상대 급상승
+      if(isClap && armed){
         armed=false;
-        clapTimes.push(now); clapTimes=clapTimes.filter(t=>now-t<2000); // 2초 윈도우
-        // 박수 잡힐 때마다 버튼 깜빡 + 카운트 토스트
-        if(btn){ btn.style.transform='scale(1.4)'; setTimeout(()=>btn.style.transform='',150); }
+        clapTimes.push(now); clapTimes=clapTimes.filter(t=>now-t<2200);
+        if(btn){ btn.style.transform='scale(1.5)'; setTimeout(()=>btn.style.transform='',150); }
         const c=clapTimes.length;
-        if(c<3) toast(`👏 ${c}번${'·'.repeat(c)}`,'ok');
-        if(c>=3 && !reporting){ clapTimes=[]; fullReport(); }
-        setTimeout(()=>{armed=true;},170); // 같은 박수 중복 카운트 방지
+        if(c<3) toast(`👏 ${c}번 잡힘${'·'.repeat(c)}`,'ok');
+        if(c>=3 && !reporting){ clapTimes=[]; if(inp) inp.placeholder=ph; fullReport(); }
+        setTimeout(()=>{armed=true;},170);
       }
       requestAnimationFrame(loop);
     })();
@@ -1333,6 +1339,7 @@ async function toggleClap(force){
     clapOn=false; clapTimes=[];
     try{ clapStream&&clapStream.getTracks().forEach(t=>t.stop()); clapCtx&&clapCtx.close(); }catch(e){}
     clapStream=clapCtx=null; updateClapBtn();
+    const inp=document.getElementById('chatInput'); if(inp) inp.placeholder='명령하세요, 테리 — 말(🎤)로도 가능';
     toast('👏 박수 감지 OFF');
   }
 }
