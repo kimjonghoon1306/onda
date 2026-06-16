@@ -292,6 +292,23 @@ body::after{
 .dp-health .hh-ms{margin-left:auto;font-size:11px;color:var(--sub);font-weight:600}
 .dp-btn.deploy{background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 24%,transparent),color-mix(in srgb,var(--accent3) 24%,transparent));border-color:color-mix(in srgb,var(--accent) 45%,transparent);color:var(--txt);font-weight:700}
 .dp-btn.deploy:disabled{opacity:.5;cursor:not-allowed}
+/* ── 관제 레이더 ── */
+.radar{position:relative;width:100%;max-width:230px;aspect-ratio:1;margin:8px auto 2px}
+.radar-svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.radar-svg .rl{fill:none;stroke:color-mix(in srgb,var(--accent) 30%,transparent);stroke-width:1}
+.radar-svg .rl-d{stroke:color-mix(in srgb,var(--accent) 16%,transparent);stroke-dasharray:3 5}
+.radar-sweep{position:absolute;inset:0;border-radius:50%;background:conic-gradient(from 0deg,color-mix(in srgb,var(--accent) 42%,transparent),transparent 55deg);animation:radarSpin 3.6s linear infinite;pointer-events:none;mix-blend-mode:screen}
+@keyframes radarSpin{to{transform:rotate(360deg)}}
+.radar-core{position:absolute;left:50%;top:50%;width:9px;height:9px;border-radius:50%;transform:translate(-50%,-50%);background:var(--accent);box-shadow:0 0 12px var(--accent),0 0 28px var(--accent);animation:pulse 1.6s infinite}
+.radar-blips{position:absolute;inset:0}
+.blip{position:absolute;width:13px;height:13px;transform:translate(-50%,-50%);cursor:pointer;z-index:2}
+.blip i{display:block;width:9px;height:9px;margin:2px;border-radius:50%;background:var(--bc);box-shadow:0 0 8px var(--bc);transition:.3s}
+.blip::after{content:"";position:absolute;inset:0;border-radius:50%;border:1px solid var(--bc);opacity:0;animation:blipPing 3.6s linear infinite}
+.blip.down i{background:#ff6b6b;box-shadow:0 0 10px #ff6b6b}
+.blip.down::after{border-color:#ff6b6b}
+.blip:hover i{transform:scale(1.5)}
+@keyframes blipPing{0%{transform:scale(.5);opacity:.9}45%{opacity:0}100%{opacity:0}}
+.sig{width:100%;height:48px;display:block;margin-top:8px}
 /* 사업 상세 대시보드 패널 (우측 드로어) */
 .detail-scrim{position:fixed;inset:0;z-index:55;background:rgba(6,12,24,.6);backdrop-filter:blur(5px);
   display:none;justify-content:flex-end}
@@ -375,10 +392,39 @@ body::after{
           <div class="gauge"><div class="ring" style="--v:64"><b>64</b></div><div class="gauge-info"><b>처리 작업</b><span>대기 3건</span></div></div>
         </div>
       </div>
+      <!-- 관제 레이더 -->
       <div class="panel">
-        <div class="panel-h mono">ACTIVITY · 7D</div>
+        <div class="panel-h mono">관제 레이더 · LIVE</div>
+        <div class="radar" id="radar">
+          <svg class="radar-svg" viewBox="0 0 200 200" aria-hidden="true">
+            <defs>
+              <radialGradient id="rg" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="var(--accent)" stop-opacity=".10"/>
+                <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+            <circle cx="100" cy="100" r="96" fill="url(#rg)"/>
+            <circle cx="100" cy="100" r="96" class="rl"/><circle cx="100" cy="100" r="66" class="rl"/><circle cx="100" cy="100" r="36" class="rl"/>
+            <line x1="100" y1="4" x2="100" y2="196" class="rl"/><line x1="4" y1="100" x2="196" y2="100" class="rl"/>
+            <line x1="29" y1="29" x2="171" y2="171" class="rl rl-d"/><line x1="171" y1="29" x2="29" y2="171" class="rl rl-d"/>
+          </svg>
+          <span class="radar-sweep"></span>
+          <span class="radar-core"></span>
+          <div class="radar-blips" id="radarBlips"></div>
+        </div>
+      </div>
+      <!-- 라이브 시그널 그래프 -->
+      <div class="panel">
+        <div class="panel-h mono">ACTIVITY · LIVE SIGNAL</div>
         <div class="spark" id="spark"></div>
-        <div style="margin-top:10px;font-size:12px;color:var(--sub)">최근 7일 통합 트래픽 추이</div>
+        <svg class="sig" id="sig" viewBox="0 0 300 60" preserveAspectRatio="none" aria-hidden="true">
+          <polyline id="sigLine" fill="none" stroke="var(--accent)" stroke-width="2" points=""/>
+          <polygon id="sigFill" fill="url(#sigGrad)" points=""/>
+          <defs><linearGradient id="sigGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="var(--accent)" stop-opacity=".28"/><stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+          </linearGradient></defs>
+        </svg>
+        <div style="margin-top:6px;font-size:12px;color:var(--sub)">실시간 통합 트래픽 신호</div>
       </div>
     </div>
 
@@ -489,8 +535,8 @@ body::after{
 <script>
 /* ── 데이터 ── */
 const BIZ = [
-  { e:'🏬', n:'무한분양', d:'쇼핑몰 빌더 · 24스킨', m:24, u:'스킨', c:'#38d6ff', url:'https://on.xn--zk5biyyw.com',
-    brief:'클릭 한 번으로 쇼핑몰을 찍어내는 빌더입니다. 24개 스킨, 발행 쇼핑몰 운영 중이에요.',
+  { e:'🏬', n:'무한분양', d:'쇼핑몰 빌더 · 14스킨', m:14, u:'스킨', c:'#38d6ff', url:'https://on.xn--zk5biyyw.com',
+    brief:'클릭 한 번으로 쇼핑몰을 찍어내는 빌더입니다. 14종 스킨(토큰 기반)으로 매장을 통째로 갈아입혀요.',
     live:{ url:'https://nvswnasjtnbrmpdetcbv.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52c3duYXNqdG5icm1wZGV0Y2J2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0MTYzNjUsImV4cCI6MjA5Njk5MjM2NX0.1EJZgsAs-lYdy5-d8nHaI1iNZ2qSR3nNKMQLtFKBwRw', table:'stores', u:'몰' },
     admin:'https://on.xn--zk5biyyw.com/dashboard',
     metrics:[{l:'발행 쇼핑몰',t:'stores'},{l:'전체 상품',t:'products'}],
@@ -572,6 +618,9 @@ function initApp(){
   unread=0; updateBadge(); // 환영은 안읽음 카운트 제외
   startClock();
   liveTicks();
+  renderRadar();           // 관제 레이더 블립
+  initSignal();            // 라이브 시그널 그래프
+  setInterval(tickSignal, 1100);
   fetchLiveData();
   setTimeout(checkAllHealth, 1500); // 초기 생사 점검
 }
@@ -665,7 +714,7 @@ function briefBiz(i){
 function countUp(el){
   if(!el) return; const target=parseInt(el.dataset.num); if(isNaN(target)) return;
   const dur=900, t0=performance.now();
-  (function step(t){ const p=Math.min((t-t0)/dur,1); const e=1-Math.pow(1-p,3);
+  (function step(t){ const p=Math.max(0,Math.min((t-t0)/dur,1)); const e=1-Math.pow(1-p,3);
     el.textContent=Math.round(target*e); if(p<1)requestAnimationFrame(step); })(t0);
 }
 
@@ -706,7 +755,7 @@ function jarvisReply(q){
   const t = q.replace(/\s/g,'');
   if(/안녕|하이|반가/.test(t)) return '안녕하세요 테리. 오늘도 온종일이 곁에 있겠습니다. 🌙';
   if(/매출|수익|돈/.test(t)) return '이번 달 통합 매출은 전월 대비 <b style="color:var(--accent)">+18%</b> 입니다. 온종일팜 주문이 특히 늘었어요. 상세 리포트를 볼까요?';
-  if(/무한분양/.test(t)) return '무한분양은 정상 가동 중입니다. 24개 스킨, 발행 쇼핑몰 운영 중이고 인트로 영상도 라이브예요.';
+  if(/무한분양/.test(t)) return '무한분양은 정상 가동 중입니다. 14종 스킨, 발행 쇼핑몰 운영 중이고 인트로 영상도 라이브예요.';
   if(/온종일팜|농수산|팜/.test(t)) return '온종일팜은 이번 달 주문 128건 처리 중입니다. 신선식품 카테고리가 가장 활발해요.';
   if(/할일|일정|todo|투두/.test(t)) return '오늘 추천 작업: ① 온종일팜 SQL 미실행 4건 확인 ② 유안 F&B 신규 입점 문의 응대 ③ 토스 PG 가맹 심사 상태 점검';
   if(/날씨/.test(t)) return '죄송하지만 날씨 API는 아직 연결되지 않았습니다. 원하시면 붙여드릴게요. ☁️';
@@ -853,13 +902,41 @@ async function checkAllHealth(){
   cards.forEach(c=>{ const led=c.querySelector('.bc-led'); if(led&&BIZ[+c.dataset.i].url!=='#'){ led.innerHTML='<span class="led"></span>점검중'; led.classList.add('chk'); }});
   let up=0,down=0,n=0;
   for(const c of cards){ const b=BIZ[+c.dataset.i]; const led=c.querySelector('.bc-led'); if(!led||b.url==='#') continue;
-    const h=await pingBiz(b); n++;
+    const h=await pingBiz(b); n++; b._health=h.state;
     led.classList.remove('chk');
     if(h.state==='up'){ up++; led.innerHTML=(b._live?'<span class="led"></span>LIVE':'<span class="led"></span>ONLINE'); led.classList.remove('down'); }
     else { down++; led.innerHTML='<span class="led"></span>OFFLINE'; led.classList.add('down'); }
   }
   toast(`🛰️ 헬스 점검 완료 — 🟢 ${up} 정상${down?` · 🔴 ${down} 점검필요`:''} (총 ${n})`, down?'warn':'ok');
+  // HUD 상단 상태 + 레이더 갱신
+  const hs=document.getElementById('hudStatus');
+  if(hs) hs.innerHTML = down ? `<span class="led" style="background:#ff6b6b;box-shadow:0 0 10px #ff6b6b"></span> ${down} UNIT${down>1?'S':''} DOWN` : '<span class="led"></span> ALL SYSTEMS ONLINE';
+  renderRadar();
 }
+
+/* ── 관제 레이더 블립 ── */
+function renderRadar(){
+  const wrap=document.getElementById('radarBlips'); if(!wrap) return;
+  const R=[34,41,30,39,33,43];
+  wrap.innerHTML=BIZ.map((b,i)=>{
+    const ang=(i/BIZ.length)*2*Math.PI - Math.PI/2 + 0.3;
+    const r=R[i%R.length];
+    const x=(50+Math.cos(ang)*r).toFixed(1), y=(50+Math.sin(ang)*r).toFixed(1);
+    const down=b._health==='down';
+    return `<span class="blip ${down?'down':''}" style="left:${x}%;top:${y}%;--bc:${b.c}" title="${b.n} — 클릭하면 상세" onclick="openDetail(${i})"><i></i></span>`;
+  }).join('');
+}
+
+/* ── 라이브 시그널 그래프 ── */
+let sigData=[];
+function initSignal(){ sigData=Array.from({length:40},(_,i)=>26+Math.sin(i/3)*8+Math.random()*8); drawSignal(); }
+function drawSignal(){
+  const line=document.getElementById('sigLine'), fill=document.getElementById('sigFill'); if(!line) return;
+  const W=300,H=60,n=sigData.length;
+  const pts=sigData.map((v,i)=>`${(i/(n-1)*W).toFixed(1)},${(H-v).toFixed(1)}`).join(' ');
+  line.setAttribute('points',pts); fill.setAttribute('points',`0,${H} ${pts} ${W},${H}`);
+}
+function tickSignal(){ const last=sigData[sigData.length-1]||30; sigData.push(Math.max(8,Math.min(54,last+(Math.random()-.5)*16))); if(sigData.length>40)sigData.shift(); drawSignal(); }
 function closeSettings(){ document.getElementById('settings').classList.remove('on'); }
 function getEngine(){ return localStorage.getItem('jarvis-engine')||'gemini'; }
 function setEngine(e){ localStorage.setItem('jarvis-engine',e); reflectEngine(); }
