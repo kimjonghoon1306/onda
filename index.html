@@ -1310,17 +1310,22 @@ async function toggleClap(force){
     const buf=new Uint8Array(an.fftSize);
     let armed=true;
     clapOn=true; updateClapBtn();
-    toast('👏 박수 감지 ON — 박수 세 번이면 전체 점검 보고','ok');
+    toast('👏 박수 감지 ON — 박수 세 번 짝짝짝!','ok');
+    const btn=document.getElementById('clapBtn');
     (function loop(){
       if(!clapOn) return;
       an.getByteTimeDomainData(buf);
       let peak=0; for(let i=0;i<buf.length;i++){ const v=Math.abs(buf[i]-128); if(v>peak)peak=v; }
       const now=performance.now();
-      if(peak>74 && armed){            // 박수 같은 강한 순간음
+      if(peak>52 && armed){            // 박수 같은 강한 순간음 (민감도 ↑)
         armed=false;
-        clapTimes.push(now); clapTimes=clapTimes.filter(t=>now-t<1600); // 1.6초 윈도우
-        if(clapTimes.length>=3 && !reporting){ clapTimes=[]; fullReport(); }
-        setTimeout(()=>{armed=true;},160); // 같은 박수 중복 카운트 방지
+        clapTimes.push(now); clapTimes=clapTimes.filter(t=>now-t<2000); // 2초 윈도우
+        // 박수 잡힐 때마다 버튼 깜빡 + 카운트 토스트
+        if(btn){ btn.style.transform='scale(1.4)'; setTimeout(()=>btn.style.transform='',150); }
+        const c=clapTimes.length;
+        if(c<3) toast(`👏 ${c}번${'·'.repeat(c)}`,'ok');
+        if(c>=3 && !reporting){ clapTimes=[]; fullReport(); }
+        setTimeout(()=>{armed=true;},170); // 같은 박수 중복 카운트 방지
       }
       requestAnimationFrame(loop);
     })();
