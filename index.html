@@ -533,6 +533,18 @@ body::after{
         <div class="hook-sec-d">각 사업의 <b>Vercel → 프로젝트 → Settings → Git → Deploy Hooks</b>에서 URL을 만들어 붙여넣으면, 온다가 버튼/명령으로 즉시 재배포합니다. (URL은 이 브라우저에만 저장)</div>
         <div id="hookList"></div>
       </div>
+
+      <!-- 기기 동기화 -->
+      <div class="hook-sec">
+        <div class="hook-sec-h">☁️ 기기 동기화 (PC ↔ 모바일)</div>
+        <div class="hook-sec-d">PC·모바일에 <b>같은 동기화 비밀번호</b>를 입력하면 채팅·키·배포훅·설정이 실시간으로 공유됩니다. 비밀번호로 <b>암호화</b>되어 저장돼서 서버도 내용을 볼 수 없어요.</div>
+        <div class="hook-row">
+          <span class="hk-em">🔐</span><span class="hk-nm">동기화 PW</span>
+          <input id="syncPass" type="password" placeholder="PC·모바일 공통 비밀번호" autocomplete="off">
+          <button class="hk-save" onclick="connectSync()">연결</button>
+        </div>
+        <div class="key-msg" id="syncStatus" style="margin-top:8px;font-size:12px;color:var(--sub)"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -629,6 +641,7 @@ function initApp(){
   setInterval(tickSignal, 1100);
   fetchLiveData();
   setTimeout(checkAllHealth, 1500); // 초기 생사 점검
+  if(getPass()){ syncPull(true).then(startSyncPoll); } // 기기 동기화 자동 시작
 }
 
 /* ── 실데이터 연결 (Supabase count, anon 공개키) ── */
@@ -747,13 +760,15 @@ function toggleTheme(){
   document.documentElement.setAttribute('data-theme', next);
   document.getElementById('themeIco').textContent = next==='dark'?'🌙':'☀️';
   try{ localStorage.setItem('jarvis-theme', next); }catch(e){}
+  if(!applying) syncSoon();
 }
 (function(){ try{ const t=localStorage.getItem('jarvis-theme'); if(t){ document.documentElement.setAttribute('data-theme',t); document.getElementById('themeIco').textContent=t==='dark'?'🌙':'☀️'; } }catch(e){} })();
 
 /* ── 채팅 ── */
 const msgs = document.getElementById('msgs');
-function addU(t){ const d=document.createElement('div'); d.className='jmsg u'; d.textContent=t; msgs.appendChild(d); msgs.scrollTop=msgs.scrollHeight; }
-function addJ(html){ const d=document.createElement('div'); d.className='jmsg j'; d.innerHTML='<b>ONDA</b>'+html; msgs.appendChild(d); msgs.scrollTop=msgs.scrollHeight; if(!chatOpen){ unread++; updateBadge(); } speak(html); }
+let chatLog=[];
+function addU(t){ const d=document.createElement('div'); d.className='jmsg u'; d.textContent=t; msgs.appendChild(d); msgs.scrollTop=msgs.scrollHeight; chatLog.push({r:'u',t}); syncSoon(); }
+function addJ(html){ const d=document.createElement('div'); d.className='jmsg j'; d.innerHTML='<b>ONDA</b>'+html; msgs.appendChild(d); msgs.scrollTop=msgs.scrollHeight; if(!chatOpen){ unread++; updateBadge(); } speak(html); chatLog.push({r:'j',h:html}); syncSoon(); }
 function addTyping(){ const d=document.createElement('div'); d.className='jmsg j typing'; d.id='typing'; d.innerHTML='<b>ONDA</b><span></span><span></span><span></span>'; msgs.appendChild(d); msgs.scrollTop=msgs.scrollHeight; }
 
 // 데모 응답 (※ 실제 AI 연결 자리: 여기서 fetch로 Gemini/Claude 호출하면 됨)
@@ -799,6 +814,7 @@ function openSettings(){
   ['gemini','claude','groq'].forEach(id=>{ const v=localStorage.getItem(KEY_STORE[id])||''; const el=document.getElementById('key-'+id); if(el)el.value=v; });
   reflectEngine();
   renderHooks();
+  const sp=document.getElementById('syncPass'); if(sp){ sp.value=getPass(); setSyncStatus(getPass()?'🔗 동기화 연결됨':'미연결 — 비밀번호를 넣고 연결하세요'); }
   document.getElementById('settings').classList.add('on');
 }
 
@@ -825,7 +841,7 @@ function toggleVoice(){
   recog.onend=()=>{ listening=false; mic.classList.remove('listening'); const q=inp.value.trim(); if(q){ voiceOut=true; setVoiceOut(true); sendMsg(); } };
   recog.start();
 }
-function setVoiceOut(on){ voiceOut=on; try{localStorage.setItem('onda-voice',on?'1':'0');}catch(e){} const b=document.getElementById('voiceBtn'); if(b){ b.classList.toggle('on',on); b.textContent=on?'🔊':'🔇'; } if(!on&&window.speechSynthesis) speechSynthesis.cancel(); }
+function setVoiceOut(on){ voiceOut=on; try{localStorage.setItem('onda-voice',on?'1':'0');}catch(e){} const b=document.getElementById('voiceBtn'); if(b){ b.classList.toggle('on',on); b.textContent=on?'🔊':'🔇'; } if(!on&&window.speechSynthesis) speechSynthesis.cancel(); if(!applying) syncSoon(); }
 function speak(html){
   if(!voiceOut||!window.speechSynthesis) return;
   const plain=String(html).replace(/<[^>]+>/g,'').replace(/&[a-z]+;/g,' ').replace(/\s+/g,' ').trim();
@@ -833,6 +849,99 @@ function speak(html){
   speechSynthesis.cancel();
   const u=new SpeechSynthesisUtterance(plain); u.lang='ko-KR'; u.rate=1.05; u.pitch=1.02;
   speechSynthesis.speak(u);
+}
+
+/* ════════ ☁️ 기기 동기화 (Supabase + 비밀번호 AES 암호화) ════════ */
+const SUPA={ url:'https://zviuiyknejgyzvvhuftc.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp2aXVpeWtuZWpneXp2dmh1ZnRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0MTU4MjcsImV4cCI6MjA5Njk5MTgyN30.wUKnLT9LGv1CbR2-lJXxNtDKKSHWYXAL1jF5sAfPSCs' };
+const SYNC_PASS_KEY='onda-sync-pass';
+const DEVICE=(localStorage.getItem('onda-device')||(()=>{const d='dev-'+Math.random().toString(36).slice(2,8);localStorage.setItem('onda-device',d);return d;})());
+let syncTimer=null, lastRemoteTs=0, applying=false;
+function getPass(){ return localStorage.getItem(SYNC_PASS_KEY)||''; }
+async function deriveKey(pass){
+  const enc=new TextEncoder();
+  const base=await crypto.subtle.importKey('raw',enc.encode(pass),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt:enc.encode('onda-salt-v1'),iterations:100000,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+}
+async function syncId(pass){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('onda:'+pass));
+  return 'g_'+[...new Uint8Array(buf)].slice(0,12).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+const _b64=b=>btoa(String.fromCharCode(...new Uint8Array(b))), _unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function encState(pass,obj){
+  const key=await deriveKey(pass), iv=crypto.getRandomValues(new Uint8Array(12));
+  const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(JSON.stringify(obj)));
+  return _b64(iv)+'.'+_b64(ct);
+}
+async function decState(pass,cipher){
+  const [ivb,ctb]=cipher.split('.'), key=await deriveKey(pass);
+  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:_unb64(ivb)},key,_unb64(ctb));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+function collectState(){
+  return {
+    keys:{ gemini:localStorage.getItem('jarvis-key-gemini')||'', claude:localStorage.getItem('jarvis-key-claude')||'', groq:localStorage.getItem('jarvis-key-groq')||'' },
+    hooks:Object.fromEntries(BIZ.map(b=>[b.n,getHook(b.n)]).filter(x=>x[1])),
+    chat:chatLog.slice(-120),
+    settings:{ engine:getEngine(), voice:voiceOut?'1':'0', theme:document.documentElement.getAttribute('data-theme')||'' }
+  };
+}
+function applyState(s){
+  applying=true;
+  try{
+    if(s.keys) for(const k of ['gemini','claude','groq']) if(s.keys[k]!==undefined) localStorage.setItem('jarvis-key-'+k,s.keys[k]);
+    if(s.hooks) for(const b of BIZ){ const v=s.hooks[b.n]; if(v!==undefined) localStorage.setItem('onda-hook-'+b.n,v); }
+    if(s.settings){
+      if(s.settings.engine) localStorage.setItem('jarvis-engine',s.settings.engine);
+      if(s.settings.theme){ document.documentElement.setAttribute('data-theme',s.settings.theme); localStorage.setItem('jarvis-theme',s.settings.theme); document.getElementById('themeIco').textContent=s.settings.theme==='dark'?'🌙':'☀️'; }
+      if(s.settings.voice!==undefined){ voiceOut=s.settings.voice==='1'; setVoiceOut(voiceOut); }
+    }
+    if(Array.isArray(s.chat)){ chatLog=s.chat; renderChat(); }
+  }finally{ applying=false; }
+}
+function renderChat(){
+  msgs.innerHTML='';
+  for(const m of chatLog){ const d=document.createElement('div');
+    if(m.r==='u'){ d.className='jmsg u'; d.textContent=m.t; }
+    else { d.className='jmsg j'; d.innerHTML='<b>ONDA</b>'+(m.h||''); }
+    msgs.appendChild(d); }
+  msgs.scrollTop=msgs.scrollHeight;
+}
+function setSyncStatus(t){ const el=document.getElementById('syncStatus'); if(el) el.innerHTML=t; }
+function syncSoon(){ if(!getPass()||applying) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncPush,1200); }
+async function syncPush(){
+  const pass=getPass(); if(!pass||applying) return;
+  try{
+    const id=await syncId(pass), cipher=await encState(pass,collectState()), ts=Date.now(); lastRemoteTs=ts;
+    await fetch(`${SUPA.url}/rest/v1/onda_sync?on_conflict=id`,{method:'POST',
+      headers:{apikey:SUPA.key,Authorization:'Bearer '+SUPA.key,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify({id,cipher,device:DEVICE,updated_at:new Date(ts).toISOString()})});
+    setSyncStatus('✅ 동기화됨 · '+new Date().toLocaleTimeString('ko-KR'));
+  }catch(e){ setSyncStatus('⚠️ 업로드 실패: '+e.message); }
+}
+async function syncPull(force){
+  const pass=getPass(); if(!pass) return;
+  try{
+    const id=await syncId(pass);
+    const r=await fetch(`${SUPA.url}/rest/v1/onda_sync?id=eq.${id}&select=cipher,device,updated_at`,{headers:{apikey:SUPA.key,Authorization:'Bearer '+SUPA.key}});
+    const rows=await r.json(); if(!Array.isArray(rows)||!rows.length||!rows[0].cipher){ if(force) setSyncStatus('🆕 새 동기화 그룹 — 이 기기 데이터를 올립니다.'); return; }
+    const ts=new Date(rows[0].updated_at).getTime();
+    if(!force && (rows[0].device===DEVICE || ts<=lastRemoteTs)) return;
+    lastRemoteTs=ts;
+    applyState(await decState(pass,rows[0].cipher));
+    setSyncStatus('⬇️ 받아옴 · '+new Date().toLocaleTimeString('ko-KR'));
+    if(!force) toast('☁️ 다른 기기의 변경사항을 받아왔어요.','ok');
+  }catch(e){ if(force) setSyncStatus('⚠️ 비밀번호가 다르거나 오류: '+e.message); }
+}
+function startSyncPoll(){ if(window._syncPoll) clearInterval(window._syncPoll); if(getPass()) window._syncPoll=setInterval(()=>syncPull(false),4000); }
+async function connectSync(){
+  const v=document.getElementById('syncPass').value.trim();
+  if(!v){ setSyncStatus('비밀번호를 입력하세요'); return; }
+  localStorage.setItem(SYNC_PASS_KEY,v);
+  setSyncStatus('🔄 연결 중...');
+  await syncPull(true);   // 원격에 있으면 받아오기
+  await syncPush();       // 현재 상태 올리기
+  startSyncPoll();
+  toast('☁️ 기기 동기화 연결됨','ok');
 }
 let chatOpen=false, unread=0;
 function toggleChat(force){
@@ -863,6 +972,7 @@ function saveHook(i){
   localStorage.setItem(HOOK_KEY(BIZ[i].n), v);
   document.getElementById('hkok-'+i).textContent = v?'✓':'';
   toast(`${BIZ[i].e} <b>${BIZ[i].n}</b> 배포 훅 ${v?'저장됨 ✅':'삭제됨'}`, v?'ok':'warn');
+  syncSoon();
 }
 async function deployBiz(i){
   const b=BIZ[i], hook=getHook(b.n);
@@ -969,7 +1079,7 @@ function drawSignal(){
 function tickSignal(){ const last=sigData[sigData.length-1]||30; sigData.push(Math.max(8,Math.min(54,last+(Math.random()-.5)*16))); if(sigData.length>40)sigData.shift(); drawSignal(); }
 function closeSettings(){ document.getElementById('settings').classList.remove('on'); }
 function getEngine(){ return localStorage.getItem('jarvis-engine')||'gemini'; }
-function setEngine(e){ localStorage.setItem('jarvis-engine',e); reflectEngine(); }
+function setEngine(e){ localStorage.setItem('jarvis-engine',e); reflectEngine(); syncSoon(); }
 function reflectEngine(){ const e=getEngine(); document.querySelectorAll('#engPick button').forEach(b=>b.classList.toggle('sel', b.dataset.eng===e)); }
 function toggleKey(id){ const el=document.getElementById('key-'+id); el.type = el.type==='password'?'text':'password'; }
 function saveKey(id){
