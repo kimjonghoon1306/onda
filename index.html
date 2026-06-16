@@ -213,8 +213,9 @@ body::after{
 @media(max-width:420px){.biz-grid{grid-template-columns:1fr}}
 .biz-card{background:var(--surf);border:1px solid var(--line);border-radius:16px;padding:16px;position:relative;overflow:hidden;
   cursor:pointer;transition:transform .35s cubic-bezier(.2,.8,.2,1),border-color .3s,box-shadow .3s;text-decoration:none;color:inherit;display:block;
-  opacity:0;transform:translateY(22px);}
-.biz-card.in{opacity:1;transform:none}
+  opacity:0;transform:perspective(900px) rotateX(14deg) translateY(28px) scale(.96);}
+.biz-card.in{opacity:1;transform:none;animation:cardIn .6s cubic-bezier(.2,.9,.2,1)}
+@keyframes cardIn{0%{opacity:0;transform:perspective(900px) rotateX(14deg) translateY(28px) scale(.96)}60%{opacity:1}100%{transform:none}}
 .biz-card{transform-style:preserve-3d;will-change:transform}
 .bc-emoji,.bc-name,.bc-metric b{transform:translateZ(28px)}
 .bc-desc,.bc-led{transform:translateZ(14px)}
@@ -241,7 +242,11 @@ body::after{
 .bc-desc{font-size:11.5px;color:var(--sub);line-height:1.5;min-height:34px;position:relative}
 .bc-spark{height:30px;margin-top:10px;opacity:.85;position:relative;transform:translateZ(8px)}
 .bc-spark svg{width:100%;height:100%;display:block;overflow:visible}
+.bc-spark polyline{stroke-dasharray:240;stroke-dashoffset:240;animation:draw 1.2s ease forwards}
+.biz-card.in .bc-spark polyline{animation:draw 1.4s ease forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
 .biz-card:hover .bc-spark{opacity:1}
+.biz-card:hover .bc-spark polyline{animation:draw .9s ease forwards}
 .bc-metric{margin-top:10px;display:flex;align-items:baseline;gap:6px;padding-top:11px;border-top:1px solid var(--line);position:relative}
 .bc-metric b{font-family:'Share Tech Mono';font-size:20px;color:var(--c,var(--accent))}
 .bc-metric span{font-size:11px;color:var(--sub)}
