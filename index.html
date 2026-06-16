@@ -296,12 +296,18 @@ body::after{
 <script>
 /* ── 데이터 ── */
 const BIZ = [
-  { e:'🏬', n:'무한분양', d:'쇼핑몰 빌더 · 24스킨', m:24, u:'스킨', c:'#38d6ff', url:'https://on.xn--zk5biyyw.com' },
-  { e:'🥬', n:'온종일팜', d:'농수산물 쇼핑몰', m:128, u:'주문/월', c:'#34e1a0', url:'https://app.yuanfnb.com' },
-  { e:'🍽️', n:'유안 F&B', d:'식품 유통 플랫폼', m:20, u:'거래처', c:'#ffb454', url:'https://yuanfnb.com' },
-  { e:'🤖', n:'스토어 자동생성', d:'AI 상세페이지 생성', m:'AI', u:'엔진', c:'#a98bff', url:'#' },
-  { e:'📊', n:'방판 프로', d:'방문판매 MLM 관리', m:'∞', u:'회원', c:'#ff6fae', url:'#' },
-  { e:'🌙', n:'온종일 본사', d:'제작 포트폴리오', m:120, u:'프로젝트', c:'#6ea8ff', url:'https://www.xn--zk5biyyw.com' },
+  { e:'🏬', n:'무한분양', d:'쇼핑몰 빌더 · 24스킨', m:24, u:'스킨', c:'#38d6ff', url:'https://on.xn--zk5biyyw.com',
+    brief:'클릭 한 번으로 쇼핑몰을 찍어내는 빌더입니다. 24개 스킨, 발행 쇼핑몰 운영 중이에요.' },
+  { e:'🥬', n:'온종일팜', d:'농수산물 쇼핑몰 (유안 F&B)', m:128, u:'주문/월', c:'#34e1a0', url:'https://app.yuanfnb.com',
+    brief:'유안 F&B의 농수산물 도매·소매 쇼핑몰입니다. 이번 달 주문 128건 처리 중.' },
+  { e:'✍️', n:'퍼블리', d:'네이버·티스토리 자동발행', m:'AUTO', u:'발행', c:'#ffb454', url:'#',
+    brief:'네이버 블로그·티스토리에 글을 자동으로 발행하는 PC 프로그램입니다. (데스크탑 앱이라 웹 주소는 없어요)' },
+  { e:'🤖', n:'스토어 자동생성', d:'AI 상세페이지 생성', m:'AI', u:'엔진', c:'#a98bff', url:'https://store.xn--zk5biyyw.com',
+    brief:'상품 사진만 올리면 AI가 키워드·카피·상세페이지를 자동 생성합니다. store.온종일.com 에서 써보세요.' },
+  { e:'📊', n:'방판 프로', d:'방문판매 MLM 관리', m:'∞', u:'회원', c:'#ff6fae', url:'#',
+    brief:'방문판매 조직·실적·수당을 관리하는 MLM 플랫폼입니다. 현재 개발 진행 중이에요.' },
+  { e:'🌙', n:'온종일 본사', d:'제작 포트폴리오', m:120, u:'프로젝트', c:'#6ea8ff', url:'https://www.xn--zk5biyyw.com',
+    brief:'온종일이 직접 만든 제작 포트폴리오 사이트입니다. 120개+ 프로젝트를 소개해요.' },
 ];
 
 /* ── 부팅 시퀀스 ── */
@@ -309,7 +315,7 @@ const bootLines = [
   ['코어 시스템 초기화...', 200],
   ['신경망 엔진 로드... <span class="ok">OK</span>', 700],
   ['사업 유닛 6개 연결 중...', 1300],
-  ['무한분양 · 온종일팜 · 유안 · 스토어 · 방판 · 본사 <span class="ok">ONLINE</span>', 2000],
+  ['무한분양 · 온종일팜 · 퍼블리 · 스토어 · 방판 · 본사 <span class="ok">ONLINE</span>', 2000],
   ['보안 프로토콜 활성화... <span class="ok">OK</span>', 2700],
   ['사장님, J.A.R.V.I.S 준비 완료되었습니다. <span class="ok">●</span>', 3300],
 ];
@@ -331,7 +337,7 @@ setTimeout(() => {
 function initApp(){
   // 사업 카드 (카드별 색 + 카운트업 + 3D 틸트 + stagger 등장)
   document.getElementById('bizGrid').innerHTML = BIZ.map((b,i) => `
-    <a class="biz-card" style="--c:${b.c}" href="${b.url}" ${b.url!=='#'?'target="_blank" rel="noopener"':''}>
+    <a class="biz-card" style="--c:${b.c}" data-i="${i}" href="${b.url}" ${b.url!=='#'?'target="_blank" rel="noopener"':''}>
       <span class="bc-float"></span>
       <div class="bc-top"><span class="bc-emoji">${b.e}</span><span class="bc-led"><span class="led"></span>ONLINE</span></div>
       <div class="bc-name">${b.n}</div>
@@ -341,6 +347,17 @@ function initApp(){
   const cards = [...document.querySelectorAll('.biz-card')];
   cards.forEach((card,i)=>{
     setTimeout(()=>{ card.classList.add('in'); countUp(card.querySelector('.bc-metric b')); }, 120 + i*110);
+    // 웹주소 없는 유닛은 클릭 시 자비스가 브리핑
+    const biz = BIZ[+card.dataset.i];
+    if(biz.url==='#'){
+      card.addEventListener('click', e=>{
+        e.preventDefault();
+        document.getElementById('chatInput')?.focus({preventScroll:true});
+        addU(biz.n);
+        addTyping();
+        setTimeout(()=>{ document.getElementById('typing')?.remove(); addJ('<b style="color:'+biz.c+'">'+biz.n+'</b> — '+biz.brief); }, 700);
+      });
+    }
     // 3D 마우스 틸트 (툭 튀어나오는 입체감)
     card.addEventListener('mousemove', e=>{
       const r=card.getBoundingClientRect();
